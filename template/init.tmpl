@@ -3,6 +3,7 @@
 <p>初期設定を行ってください。</p>
 <TMPL_VAR NAME=MESSAGE>
 <form method="POST" action="<TMPL_VAR NAME=SCRIPT_NAME>">
+<input type="hidden" name="action" value="init">
 <table cellpadding="2" border="2">
 <TMPL_VAR NAME=FORM_CONTROL>
 </table>

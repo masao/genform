@@ -1,11 +1,11 @@
-#!/usr/local/bin/perl -w
+#!/usr/local/bin/perl -wT
 # -*-CPerl-*-
 # $Id$
 
 # Web 上で動的にフォームの設定情報を入力する
 
 use strict;
-use CGI qw/:standard/;
+use CGI qw/:cgi/;
 use CGI::Carp 'fatalsToBrowser';
 use HTML::Template;
 
@@ -19,22 +19,28 @@ require 'default_conf.pl';
 require "$conf::DATADIR/conf.pl" if -r "$conf::DATADIR/conf.pl";
 
 my %FORM =
-    ('main' => [
-		{ -type => 'hidden',
-		   -id => 'action',
-		   -value => 'main' },
-		 { -type => 'fieldset',
-		   -label => 'マシン固有の設定',
-		   -value => [ { -id => 'nkf',
-				 -type => 'textfield',
-				 -label => 'nkf コマンド',
-				 -description => 'nkf コマンドの位置を指定します。',
-				 -value => "/usr/local/bin/nkf" },
-			       { -id => 'sendmail',
-				 -type => 'textfield',
-				 -label => 'sendmail コマンド',
-				 -description => 'sendmail コマンドの位置を指定します。',
-				 -value => "/usr/lib/sendmail" } ] },
+    ('new' => [
+	       { -type => 'hidden',
+		 -id => 'passwd' },
+	       { -type => 'textfield',
+		 -id => 'dbname',
+		 -label => 'データベースID',
+		 -description => '半角英数字のみで入力してください。',
+		 -required => 1 },
+	      ],
+     'dbconfig' => [
+		{ -type => 'fieldset',
+		  -label => 'マシン固有の設定',
+		  -value => [ { -id => 'nkf',
+				-type => 'textfield',
+				-label => 'nkf コマンド',
+				-description => 'nkf コマンドの位置を指定します。',
+				-value => "/usr/local/bin/nkf" },
+			      { -id => 'sendmail',
+				-type => 'textfield',
+				-label => 'sendmail コマンド',
+				-description => 'sendmail コマンドの位置を指定します。',
+				-value => "/usr/lib/sendmail" } ] },
 		 { -type => 'fieldset',
 		   -label => '全般の設定',
 		   -value => [ { -id => 'email',
@@ -76,11 +82,17 @@ my %FORM =
 		  -id => 'passwd',
 		  -label => "管理者パスワード",
 		  -size => 50,
-		  -description => '管理用タスクを実行するのに必要なパスワードを設定してください。',
-		  -required => 1 },
-		{ -type => 'hidden',
-		  -id => 'action',
-		  -value => 'init' } ],
+		  -description => '管理用タスクを実行するのに必要なパスワード（4文字以上の英数字）を設定してください。',
+		  -required => 1,
+		  -validate => sub {
+		      my $val = shift;
+		      if ($val =~ /^\w+$/ && length($val) >= 4) {
+			  return 1;
+		      } else {
+			  return undef;
+		      }
+		  } }
+	       ],
      'login' => [ { -type => 'passwd',
 		    -id => 'passwd',
 		    -label => "管理者パスワード" },
@@ -92,16 +104,20 @@ my %FORM =
 main();
 sub main {
     print header();
+    my $message = verify_status();
 
-    my $message = '';
-    if (! -d $conf::DATADIR) {
-	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code>が存在しません。</p>\n";
-    } elsif (! -w $conf::DATADIR) {
-	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code>に書きこみできません。</p>\n";
-    }
-
-    if (defined param('action')) {
-	$message .= action();
+    if (!length($message) && defined param('action')) {
+	my $action = param('action');
+	if ($action eq 'init') {
+	    $message .= action_init();
+	} elsif ($action eq 'login') {
+	    $message .= action_login();
+	} elsif ($action eq 'new') {
+	    $message .= action_new();
+	} elsif ($action eq 'dbconfig') {
+	} else {
+	    $message .= "<p class=\"error-message\">エラー: 不正なCGI引数です。 （<code>action=". CGI::escapeHTML($action). "</code>）</p>\n";
+	}
     }
 
     if (! -r "$conf::DATADIR/.passwd") {
@@ -111,12 +127,21 @@ sub main {
 		     'MESSAGE' => $message,
 		     'FORM_CONTROL' => param2form($FORM{'init'}));
 	print $tmpl->output;
+    } elsif (defined(my $db = has_valid_dbname()) && has_valid_passwd()) {
+	my $tmpl = HTML::Template->new('filename' => 'template/dbconfig.tmpl');
+	$tmpl->param('SCRIPT_NAME' => script_name(),
+		     'DBNAME' => $db,
+		     'TITLE' => "データベースの設定/編集: ". $db,
+		     'MESSAGE' => $message,
+		     'FORM_CONFIG' => param2form($FORM{'dbconfig'}));
+	print $tmpl->output;
     } elsif (has_valid_passwd()) {
 	my $tmpl = HTML::Template->new('filename' => 'template/main.tmpl');
 	$tmpl->param('SCRIPT_NAME' => script_name(),
 		     'TITLE' => 'メインメニュー',
 		     'MESSAGE' => $message,
-		     'FORM_CONTROL' => param2form($FORM{'main'}));
+		     'DBINFO' => get_dbinfo(),
+		     'FORM_NEW' => param2form($FORM{'new'}));
 	print $tmpl->output;
     } else {
 	my $tmpl = HTML::Template->new('filename' => 'template/login.tmpl');
@@ -128,19 +153,49 @@ sub main {
     }
 }
 
-# CGI 引数に応じた処理をする。返り値
-sub action() {
-    my $action = param('action');
-    my $msg = validate_params($FORM{$action});
-    return $msg if ($msg);
-
-    if ($action eq 'init') {
-	return action_init();
-    } elsif ($action eq 'login') {
-	return action_login();
+# path_info() が正当か検証し、正しければそのデータベース名を返す。
+sub has_valid_dbname($) {
+    my ($db) = path_info();
+    return undef if !defined($db) || !length($db);
+    if (-d "$conf::DATADIR$db") {
+	return substr($db, 1);
     } else {
-	return "<p class=\"error-message\">エラー: 不正なCGI引数です。 （<code>action=". CGI::escapeHTML($action). "</code>）</p>\n";
+	return undef;
     }
+}
+
+sub get_dbinfo() {
+    my $retstr = '';
+    opendir(D, "$conf::DATADIR") || die "opendir fail: $conf::DATADIR: $!";
+    my @dirs = grep { -d "$conf::DATADIR/$_" && /^\w+$/ } readdir(D);
+    closedir(D);
+    foreach my $db (@dirs) {
+	$retstr .= "<tr><td>". CGI::escapeHTML($db) ."</td><td>";
+	$retstr .= "<form method=\"POST\" action=\"". script_name() ."/";
+	$retstr .= CGI::escapeHTML($db) ."\">";
+	$retstr .= "<input type=\"hidden\" name=\"action\" value=\"dbconfig\">";
+	$retstr .= "<input type=\"hidden\" name=\"passwd\" value=\"";
+	$retstr .= CGI::escapeHTML(param('passwd')) ."\">";
+	$retstr .= "<input type=\"submit\" value=\" 設定/編集 \">";
+	$retstr .= "</form></td></tr>\n";
+    }
+    return $retstr;
+}
+
+# パラメータなどから、エラー状況などを確認する。
+sub verify_status() {
+    my $message = '';
+    if (! -d $conf::DATADIR) {
+	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code> が存在しません。</p>\n";
+    } elsif (! -w $conf::DATADIR) {
+	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code> に書きこみできません。</p>\n";
+    }
+
+    my $action = param('action');
+    $message .= validate_params($FORM{$action})
+	if (defined $action && defined $FORM{$action});
+
+    return $message;
 }
 
 sub action_init() {
@@ -152,16 +207,29 @@ sub action_init() {
     print $fh $crypted_passwd;
     $fh->close;
 
-    $fh = util::fopen(">$conf::DATADIR/conf.pl");
-    print $fh "package conf;\n";
-    print $fh (param2conf($FORM{'init'}));
-    print $fh "1;\n";
-    $fh->close;
     return "<p class=\"message\">パスワードの初期設定を完了しました。</p>\n";
 }
 
 sub action_login() {
-    return "<p class=\"error-message\">エラー: パスワードが違います。</p>" if not has_valid_passwd();
+    if (has_valid_passwd()) {
+	return "<p class=\"message\">認証に成功しました。</p>"
+    } else {
+	return "<p class=\"error-message\">エラー: パスワードが違います。</p>"
+    }
+}
+
+sub action_new() {
+    my $dbname = util::untaint(param('dbname'), '\w+');
+    my $dir = "$conf::DATADIR/$dbname";
+
+    return "<p class=\"error-message\">エラー: データベース <strong>".
+	   CGI::escapeHTML($dbname) ."</strong> は既に存在します。</p>"
+		   if (-d $dir);
+
+    mkdir($dir, 0777) || die "mkdir fail: $dir: $!";
+
+    return "<p class=\"message\">データベース <strong>".
+	   CGI::escapeHTML($dbname) ."</strong> の作成に成功しました。</p>"
 }
 
 # 必須項目のチェックを行う
@@ -181,6 +249,12 @@ sub validate_params(\@) {
 		(!defined(param($id)) || !length(param($id)))) {
 		$msg .= "<p class=\"error-message\">エラー: 「<strong>$$entry{-label}</strong>」は必須項目です。</p>\n";
 	    }
+	    if (defined($$entry{-validate}) &&
+		defined(param($id)) && length(param($id))) {
+		unless ($$entry{-validate}->(param($id))) {
+		    $msg .= "<p class=\"error-message\">エラー: 「<strong>$$entry{-label}</strong>」の値 <strong>". CGI::escapeHTML(param($id)) ."</strong> は不正な形式です。</p>\n";
+		}
+	    }
 	}
     }
     return $msg;
@@ -198,17 +272,11 @@ sub has_valid_passwd() {
 }
 
 # フォームから受けとったパラメータを Perl 構文に変換して conf.pl に置く。
-sub param2conf(\@) {
-    my ($parameter) = @_;
+sub param2conf(@) {
+    my (@parameter) = @_;
     my $str = '';
-    foreach my $entry (@$parameter) {
-	if ($$entry{-type} eq 'fieldset') {
-	    $str .= param2conf($$entry{-value});
-	} elsif (defined $$entry{-id}) {
-	    my $id = $$entry{-id};
-	    my $fh = util::fopen(">$conf::DATADIR/conf.pl");
-	    $str .= '$'. uc($id) .' = '. tostr(param($id)) .";\n";
-	}
+    foreach my $entry (@parameter) {
+	$str .= '$'. uc($entry) .' = '. tostr(param($entry)) .";\n";
     }
     return $str;
 }
@@ -253,9 +321,6 @@ sub param2form(\@$) {
 	    $retstr .= " size=\"$$entry{-size}\"" if defined $$entry{-size};
 	    $retstr .= ">";
 
-	    if (defined $$entry{-description}) {
-		$retstr .= "<br><small>$$entry{-description}</small>";
-	    }
 	    if (defined $$entry{-repeatable}) {
 		$retstr .= "<br><small>複数の項目を登録する場合は、コンマで区切って入れてください。<br>例: $conf::PARAM_LABELS{$entry}1,$conf::PARAM_LABELS{$entry}2,$conf::PARAM_LABELS{$entry}3</small>";
 	    }
@@ -274,6 +339,9 @@ sub param2form(\@$) {
 	    $retstr .= "<input type=\"password\" name=\"$id\" value=\"\"";
 	    $retstr .= " size=\"$$entry{-size}\"" if defined $$entry{-size};
 	    $retstr .= ">";
+	}
+	if (defined $$entry{-description}) {
+	    $retstr .= "<br><small>$$entry{-description}</small>";
 	}
 	$retstr .= "</td></tr>\n";
     }

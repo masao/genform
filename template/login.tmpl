@@ -3,6 +3,7 @@
 <p>管理者用のパスワードを入力してください。</p>
 <TMPL_VAR NAME=MESSAGE>
 <form method="POST" action="<TMPL_VAR NAME=SCRIPT_NAME>">
+<input type="hidden" name="action" value="login">
 <table cellpadding="2" border="2">
 <TMPL_VAR NAME=FORM_CONTROL>
 </table>

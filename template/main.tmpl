@@ -1,14 +1,25 @@
 <!-- -*- html-helper -*- -->
 <TMPL_INCLUDE NAME=header.tmpl>
 <p>フォームに関する情報を登録・更新します。</p>
+
 <TMPL_VAR NAME=MESSAGE>
-<form method="POST" action="<TMPL_VAR NAME=SCRIPT_NAME>">
+<TMPL_IF NAME=DBINFO>
+<h2>データベースの設定/編集</h2>
 <table cellpadding="2" border="2">
-  <TMPL_VAR NAME=FORM_CONTROL>
+  <tr><th>データベース</th><th></th></tr>
+  <TMPL_VAR NAME=DBINFO>
 </table>
+</TMPL_IF>
+<hr>
+<h2>新規データベースの作成</h2>
 <p>
-<input type="submit" value=" 登 録 ">
-</p>
-<p>※ は必須入力項目を示します。</p>
+<form method="POST" action="<TMPL_VAR NAME=SCRIPT_NAME>">
+<input type="hidden" name="action" value="new">
+<table cellpadding="2" border="2">
+  <TMPL_VAR NAME=FORM_NEW>
+</table>
+<p><input type="submit" value=" 新規作成 "></p>
 </form>
+</p>
+
 <TMPL_INCLUDE NAME=footer.tmpl>
