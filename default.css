@@ -6,10 +6,10 @@ address {
 }
 
 p.error-message {
-  background-color: pink;
+  background-color: #ffc0cb;
   padding: 2px;
 }
 p.message {
-  background-color: gray;
+  background-color: silver;
   padding: 2px;
 }
