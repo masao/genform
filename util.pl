@@ -113,7 +113,7 @@ sub param2form(\@$) {
 		$retstr .= "\n";
 		$subid++;
 	    }
-	} elsif ($$entry{-type} eq 'passwd') {
+	} elsif ($$entry{-type} eq 'password') {
 	    $retstr .= "<input type=\"password\" name=\"$id\" value=\"\"";
 	    $retstr .= " size=\"$$entry{-size}\"" if defined $$entry{-size};
 	    $retstr .= ">";

@@ -91,7 +91,7 @@ my %FORM =
 		   ],
 
      'init' => [
-		{ -type => 'passwd',
+		{ -type => 'password',
 		  -id => 'passwd',
 		  -label => "管理者パスワード",
 		  -size => 50,
@@ -107,7 +107,7 @@ my %FORM =
 		  } }
 	       ],
 
-     'login' => [ { -type => 'passwd',
+     'login' => [ { -type => 'password',
 		    -id => 'passwd',
 		    -label => "管理者パスワード",
 		    -size => 50 }
