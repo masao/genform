@@ -6,9 +6,6 @@ package util;
 use strict;
 use IO::File;
 
-my $NKF = '/usr/local/bin/nkf';
-my $SENDMAIL = '/usr/lib/sendmail';
-
 sub write_csv($@) {
     my ($fname, @values) = @_;
     my $fh = fopen(">>$fname");
@@ -24,7 +21,7 @@ sub write_csv($@) {
 
 sub send_mail($$$$$) {
     my ($from, $to, $subject, $name, $msg) = @_;
-    my $fh = fopen("| $NKF -j | $SENDMAIL -oi -t -f $from");
+    my $fh = fopen("| $conf::NKF -j | $conf::SENDMAIL -oi -t -f $from");
     print $fh <<EOF;
 From: $from
 Subject: $subject
