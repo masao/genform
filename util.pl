@@ -6,6 +6,20 @@ package util;
 use strict;
 use IO::File;
 
+# 汚染されている変数をキレイにする。（CGI::Untaint のローカル実装）
+sub untaint($$$) {
+    my ($tainted, $pattern, $default) = @_;
+    # print "\$tainted: $tainted\t\$pattern: $pattern\t\$default:$default\n";
+    return $default if !defined $tainted;
+
+    if ($tainted =~ /^($pattern)$/) {
+        # print "matched.\n";
+        return $1;
+    } else {
+        return $default;
+    }
+}
+
 sub write_csv($@) {
     my ($fname, @values) = @_;
     my $fh = fopen(">>$fname");
