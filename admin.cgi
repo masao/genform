@@ -8,6 +8,7 @@ use strict;
 use CGI qw/:cgi/;
 use CGI::Carp 'fatalsToBrowser';
 use HTML::Template;
+use Data::Dumper;
 
 $| = 1;
 
@@ -15,8 +16,12 @@ use lib ".";
 require 'util.pl';
 
 require 'default_conf.pl';
-# 既存の設定内容で上書き
-require "$conf::DATADIR/conf.pl" if -r "$conf::DATADIR/conf.pl";
+if (defined valid_dbname()) {
+    require "$conf::DATADIR/". valid_dbname() ."/conf.pl"
+	if -r "$conf::DATADIR/". valid_dbname() ."/conf.pl";
+    require "$conf::DATADIR/". valid_dbname() ."/form.pl"
+	if -r "$conf::DATADIR/". valid_dbname() ."/form.pl";
+}
 
 my %FORM =
     ('new' => [
@@ -28,55 +33,63 @@ my %FORM =
 		 -description => '半角英数字のみで入力してください。',
 		 -required => 1 },
 	      ],
+
      'dbconfig' => [
-		{ -type => 'fieldset',
-		  -label => 'マシン固有の設定',
-		  -value => [ { -id => 'nkf',
-				-type => 'textfield',
-				-label => 'nkf コマンド',
-				-description => 'nkf コマンドの位置を指定します。',
-				-value => "/usr/local/bin/nkf" },
-			      { -id => 'sendmail',
-				-type => 'textfield',
-				-label => 'sendmail コマンド',
-				-description => 'sendmail コマンドの位置を指定します。',
-				-value => "/usr/lib/sendmail" } ] },
-		 { -type => 'fieldset',
-		   -label => '全般の設定',
-		   -value => [ { -id => 'email',
-				 -type => 'textfield',
-				 -label => '担当者のメールアドレス' },
-			       { -id => 'title',
-				 -type => 'textfield',
-				 -label => 'ページのタイトル' },
-			       { -id => 'home_url',
-				 -type => 'textfield',
-				 -label => 'ホームページの URL',
-				 -value => 'http://' },
-			       { -id => 'home_title',
-				 -type => 'textfield',
-				 -label => 'ホームページのタイトル' },
-			       { -id => 'note',
-				 -type => 'textarea',
-				 -label => 'フォームの先頭に書く注意事項（HTML）',
-				 -rows => 4 } ] },
-		 { -type => 'fieldset',
-		   -label => 'システム機能の設定',
-		   -value => [ { -id => 'datafile',
-				 -type => 'textfield',
-				 -label => '登録内容を記録するCSVファイル',
-				 -description => '`chmod a+w $FILENAME`しておくこと。' },
-			       { -id => 'use_mail',
-				 -type => 'menu',
-				 -label => 'メール通知機能を使う？',
-				 -description => '使う場合は 1 にする。',
-				 -value => [ "on", "off" ],
-				 -default => "on" },
-			       { -id => 'mail_subject',
-				 -type => 'textfield',
-				 -label => 'メール通知する場合の Subject',
-				 -description => '非ASCIIは使えない' } ] },
-		 ],
+		    { -type => 'hidden',
+		      -id => 'passwd' },
+		    { -id => 'email',
+		      -type => 'textfield',
+		      -label => '担当者のメールアドレス',
+		      -value => $conf::EMAIL },
+		    { -id => 'title',
+		      -type => 'textfield',
+		      -label => 'タイトル',
+		      -value => $conf::TITLE },
+		    { -id => 'home_url',
+		      -type => 'textfield',
+		      -label => 'ホームページの URL',
+		      -value => $conf::HOME_URL },
+		    { -id => 'home_title',
+		      -type => 'textfield',
+		      -label => 'ホームページのタイトル',
+		      -value => $conf::HOME_TITLE },
+		    { -id => 'note',
+		      -type => 'textarea',
+		      -label => '入力フォームの先頭に書く注意事項',
+		      -value => $conf::NOTE,
+		      -rows => 4 },
+		   ],
+
+     'addfield' => [
+		    { -type => 'hidden',
+		      -id => 'passwd' },
+		    { -id => '-label',
+		      -type => 'textfield',
+		      -label => 'フィールド名',
+		      -size => 50,
+		      -required => 1 },
+		    { -id => '-type',
+		      -type => 'radio',
+		      -label => 'フィールド種別',
+		      -required => 1,
+		      -value => [
+				 { -id => 'textfield',
+				   -label => '一行入力<br>' },
+				 { -id => 'textarea',
+				   -label => '複数行入力<br>' },
+				 { -id => 'checkbox',
+				   -label => 'チェックボックス<br>' },
+				 { -id => 'radio',
+				   -label => 'ラジオボタン<br>' },
+				 { -id => 'menu',
+				   -label => 'スクロールメニュー<br>' },
+				 { -id => 'file',
+				   -label => 'ファイル・アップロード<br>' },
+				 { -id => 'password',
+				   -label => 'パスワード入力<br>' },
+				] },
+		   ],
+
      'init' => [
 		{ -type => 'passwd',
 		  -id => 'passwd',
@@ -93,17 +106,17 @@ my %FORM =
 		      }
 		  } }
 	       ],
+
      'login' => [ { -type => 'passwd',
 		    -id => 'passwd',
-		    -label => "管理者パスワード" },
-		  { -type => 'hidden',
-		    -id => 'action',
-		    -value => 'login' } ],
-     );
+		    -label => "管理者パスワード",
+		    -size => 50 }
+		];
+    );
 
 main();
 sub main {
-    print header();
+    print header("text/html; charset=EUC-JP");
     my $message = verify_status();
 
     if (!length($message) && defined param('action')) {
@@ -115,6 +128,9 @@ sub main {
 	} elsif ($action eq 'new') {
 	    $message .= action_new();
 	} elsif ($action eq 'dbconfig') {
+	    $message .= action_dbconfig();
+	} elsif ($action eq 'addfield') {
+	    $message .= action_addfield();
 	} else {
 	    $message .= "<p class=\"error-message\">エラー: 不正なCGI引数です。 （<code>action=". CGI::escapeHTML($action). "</code>）</p>\n";
 	}
@@ -127,12 +143,13 @@ sub main {
 		     'MESSAGE' => $message,
 		     'FORM_CONTROL' => param2form($FORM{'init'}));
 	print $tmpl->output;
-    } elsif (defined(my $db = has_valid_dbname()) && has_valid_passwd()) {
+    } elsif (defined(my $db = valid_dbname()) && has_valid_passwd()) {
 	my $tmpl = HTML::Template->new('filename' => 'template/dbconfig.tmpl');
 	$tmpl->param('SCRIPT_NAME' => script_name(),
 		     'DBNAME' => $db,
 		     'TITLE' => "データベースの設定/編集: ". $db,
 		     'MESSAGE' => $message,
+		     'FORM_ADDFIELD' => param2form($FORM{'addfield'}),
 		     'FORM_CONFIG' => param2form($FORM{'dbconfig'}));
 	print $tmpl->output;
     } elsif (has_valid_passwd()) {
@@ -154,11 +171,12 @@ sub main {
 }
 
 # path_info() が正当か検証し、正しければそのデータベース名を返す。
-sub has_valid_dbname($) {
-    my ($db) = path_info();
-    return undef if !defined($db) || !length($db);
-    if (-d "$conf::DATADIR$db") {
-	return substr($db, 1);
+sub valid_dbname() {
+    my $dbname = util::untaint(path_info(), '/\w+');
+
+    return undef if !defined($dbname) || !length($dbname);
+    if (-d "$conf::DATADIR$dbname") {
+	return substr($dbname, 1);
     } else {
 	return undef;
     }
@@ -173,7 +191,6 @@ sub get_dbinfo() {
 	$retstr .= "<tr><td>". CGI::escapeHTML($db) ."</td><td>";
 	$retstr .= "<form method=\"POST\" action=\"". script_name() ."/";
 	$retstr .= CGI::escapeHTML($db) ."\">";
-	$retstr .= "<input type=\"hidden\" name=\"action\" value=\"dbconfig\">";
 	$retstr .= "<input type=\"hidden\" name=\"passwd\" value=\"";
 	$retstr .= CGI::escapeHTML(param('passwd')) ."\">";
 	$retstr .= "<input type=\"submit\" value=\" 設定/編集 \">";
@@ -189,6 +206,11 @@ sub verify_status() {
 	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code> が存在しません。</p>\n";
     } elsif (! -w $conf::DATADIR) {
 	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code> に書きこみできません。</p>\n";
+    }
+
+    if (path_info()) {
+	my $dbname = valid_dbname();
+	$message .= "<p class=\"error-message\">エラー: 存在しないデータベースを指定しています。</p>" if not defined $dbname;
     }
 
     my $action = param('action');
@@ -230,6 +252,37 @@ sub action_new() {
 
     return "<p class=\"message\">データベース <strong>".
 	   CGI::escapeHTML($dbname) ."</strong> の作成に成功しました。</p>"
+}
+
+sub action_dbconfig() {
+    my $dbname = valid_dbname();
+    my $conf_str = param2conf('title', 'email', 'home_url', 'home_title',
+			      'note');
+    my $fh = util::fopen(">$conf::DATADIR/$dbname/conf.pl");
+    print $fh "package conf;\n";
+    print $fh $conf_str;
+    print $fh "1;\n";
+    return "<p class=\"message\">データベース <strong>".
+	   CGI::escapeHTML($dbname) ."</strong> の設定を完了しました。</p>";
+}
+
+sub action_addfield() {
+    my $dbname = valid_dbname();
+    my %field = ();
+    $field{-label} = param('-label');
+    $field{-type} = param('-type');
+    if (defined $conf::FORM) {
+	push @{$conf::FORM}, \%field;
+    } else {
+	$conf::FORM = [ \%field ];
+    }
+    my $dumper = Data::Dumper->new([ $conf::FORM ], [ qw/FORM/ ]);
+    my $fh = util::fopen(">$conf::DATADIR/$dbname/form.pl");
+    print $fh "package conf;\n";
+    print $fh $dumper->Dump();
+    print $fh "1;\n";
+    return "<p class=\"message\">フィールド「<strong>".
+	   CGI::escapeHTML(param('-label')) ."</strong>」を追加しました。</p>";
 }
 
 # 必須項目のチェックを行う
@@ -320,10 +373,6 @@ sub param2form(\@$) {
 	    $retstr .= "\"";
 	    $retstr .= " size=\"$$entry{-size}\"" if defined $$entry{-size};
 	    $retstr .= ">";
-
-	    if (defined $$entry{-repeatable}) {
-		$retstr .= "<br><small>複数の項目を登録する場合は、コンマで区切って入れてください。<br>例: $conf::PARAM_LABELS{$entry}1,$conf::PARAM_LABELS{$entry}2,$conf::PARAM_LABELS{$entry}3</small>";
-	    }
 	} elsif ($$entry{-type} eq 'textarea') {
 	    $retstr .= "<textarea name=\"$id\"";
 	    $retstr .= " rows=\"$$entry{-rows}\"" if defined $$entry{-rows};
@@ -335,6 +384,23 @@ sub param2form(\@$) {
 		$retstr .= CGI::escapeHTML($$entry{-value});
 	    }
 	    $retstr .= "</textarea>";
+	} elsif ($$entry{-type} eq 'radio') {
+	    my $subid = 0;
+	    foreach my $val (@{$$entry{-value}}) {
+		my $myvalue = $$val{-id} || "$id.$subid";
+		$retstr .= "<input type=\"radio\" name=\"$id\" value=\"$myvalue\"";
+		if (defined(param($id)) && param($id) eq $myvalue) {
+		    $retstr .= " checked";
+		}
+		$retstr .= ">";
+		if (defined $$entry{-label}) {
+		    $retstr .= $$val{-label}
+		} else {
+		    $retstr .= $myvalue;
+		}
+		$retstr .= "\n";
+		$subid++;
+	    }
 	} elsif ($$entry{-type} eq 'passwd') {
 	    $retstr .= "<input type=\"password\" name=\"$id\" value=\"\"";
 	    $retstr .= " size=\"$$entry{-size}\"" if defined $$entry{-size};
@@ -351,8 +417,12 @@ sub param2form(\@$) {
 sub tostr($) {
     my ($str) = (@_);
     if (defined $str) {
-	return "\"$str\"";
+	$str =~ s/'/\\'/g;
+	return "'$str'";
     } else {
 	return "undef";
     }
 }
+
+util::muda($conf::TITLE, $conf::EMAIL, $conf::HOME_URL, $conf::HOME_TITLE,
+	   $conf::NOTE);
