@@ -95,9 +95,9 @@ sub main {
 
     my $message = '';
     if (! -d $conf::DATADIR) {
-	$message .= "<p>エラー: ディレクトリ <code><font color=\"red\">$conf::DATADIR</font></code>が存在しません。</p>\n";
+	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code>が存在しません。</p>\n";
     } elsif (! -w $conf::DATADIR) {
-	$message .= "<p>エラー: ディレクトリ <code><font color=\"red\">$conf::DATADIR</font></code>に書きこみできません。</p>\n";
+	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code>に書きこみできません。</p>\n";
     }
 
     if (defined param('action')) {
@@ -139,8 +139,7 @@ sub action() {
     } elsif ($action eq 'login') {
 	return action_login();
     } else {
-	return "<p>エラー: 不正なCGI引数です <code><font color=\"red\">".
-	       CGI::escapeHTML($action). "</font></code></p>\n";
+	return "<p class=\"error-message\">エラー: 不正なCGI引数です。 （<code>action=". CGI::escapeHTML($action). "</code>）</p>\n";
     }
 }
 
@@ -158,11 +157,11 @@ sub action_init() {
     print $fh (param2conf($FORM{'init'}));
     print $fh "1;\n";
     $fh->close;
-    return "<p>パスワードの初期設定を完了しました。</p>\n";
+    return "<p class=\"message\">パスワードの初期設定を完了しました。</p>\n";
 }
 
 sub action_login() {
-    return "<p>パスワードが違います。</p>" if not has_valid_passwd();
+    return "<p class=\"error-message\">エラー: パスワードが違います。</p>" if not has_valid_passwd();
 }
 
 # 必須項目のチェックを行う
@@ -180,7 +179,7 @@ sub validate_params(\@) {
 	} else {
 	    if (defined($$entry{-required}) &&
 		(!defined(param($id)) || !length(param($id)))) {
-		$msg .= "<p>エラー: 「<font color=\"red\">$$entry{-label}</font>」は必須項目です。</p>\n";
+		$msg .= "<p class=\"error-message\">エラー: 「<strong>$$entry{-label}</strong>」は必須項目です。</p>\n";
 	    }
 	}
     }

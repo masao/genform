@@ -1,0 +1,15 @@
+h1 {
+  text-align: center;
+}
+address {
+  text-align: right;
+}
+
+p.error-message {
+  background-color: pink;
+  padding: 2px;
+}
+p.message {
+  background-color: gray;
+  padding: 2px;
+}
