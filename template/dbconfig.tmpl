@@ -13,6 +13,14 @@
 </form>
 
 <hr>
+<TMPL_IF NAME=FORM_INFO>
+<h2>フィールドの設定/編集</h2>
+<table cellpadding="2" border="2">
+  <tr><th>フィールド名</th><th></th></tr>
+  <TMPL_VAR NAME=FORM_INFO>
+</table>
+</TMPL_IF>
+
 <h2>フィールドの設定</h2>
 <form method="POST" action="<TMPL_VAR NAME=SCRIPT_NAME>/<TMPL_VAR NAME=DBNAME>">
 <input type="hidden" name="action" value="addfield">

@@ -1,0 +1,13 @@
+<!-- -*- html-helper -*- -->
+<TMPL_INCLUDE NAME=header.tmpl>
+<p>以下のデータベースがあります。</p>
+
+<TMPL_VAR NAME=MESSAGE>
+
+<TMPL_IF NAME=DBINFO>
+<ul>
+  <TMPL_VAR NAME=DBINFO>
+</ul>
+</TMPL_IF>
+
+<TMPL_INCLUDE NAME=footer.tmpl>

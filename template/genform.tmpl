@@ -1,0 +1,15 @@
+<!-- -*- html-helper -*- -->
+<TMPL_INCLUDE NAME=genform-dbheader.tmpl>
+<p><TMPL_VAR NAME=NOTE></p>
+
+<TMPL_VAR NAME=MESSAGE>
+
+<form method="POST" action="<TMPL_VAR NAME=SCRIPT_NAME>/<TMPL_VAR NAME=DBNAME>">
+<table cellpadding="2" border="2">
+  <TMPL_VAR NAME=FORM>
+</table>
+<p><input type="submit" value=" епо© "></p>
+</form>
+</p>
+
+<TMPL_INCLUDE NAME=genform-footer.tmpl>

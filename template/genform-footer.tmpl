@@ -1,0 +1,18 @@
+<!-- -*- html-helper -*- -->
+<hr>
+<address>
+<TMPL_IF NAME=HOME_URL>
+<a href="<TMPL_VAR NAME=HOME_URL>">
+<TMPL_IF NAME=HOME_TITLE>
+<TMPL_VAR NAME=HOME_TITLE>
+<TMPL_ELSE>
+<TMPL_VAR NAME=HOME_URL>
+</TMPL_IF>
+</TMPL_IF>
+</a>
+<TMPL_IF NAME=EMAIL>
+/ <a href="mailto:<TMPL_VAR NAME=EMAIL>"><TMPL_VAR NAME=EMAIL></a>
+</TMPL_IF>
+</address>
+</body>
+</html>

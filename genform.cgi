@@ -1,179 +1,101 @@
 #!/usr/local/bin/perl -wT
-# -*- CPerl -*-
+# -*-CPerl-*-
 # $Id$
 
+# Web 上で動的にフォームの設定情報を入力する
+
 use strict;
-use CGI qw/:standard/;
+use CGI qw/:cgi/;
 use CGI::Carp 'fatalsToBrowser';
+use HTML::Template;
 
 $| = 1;
 
 use lib ".";
 require 'util.pl';
-require 'conf.pl';	# 設定内容を読み込む
+
+require 'default_conf.pl';
+if (defined valid_dbname()) {
+    require "$conf::DATADIR/". valid_dbname() ."/conf.pl"
+	if -r "$conf::DATADIR/". valid_dbname() ."/conf.pl";
+    require "$conf::DATADIR/". valid_dbname() ."/form.pl"
+	if -r "$conf::DATADIR/". valid_dbname() ."/form.pl";
+}
 
 main();
 sub main {
-    if (defined(param())) {
-	my $error = '';
-	for my $entry (keys %conf::REQ_PARAMETERS) { # 必須項目のエラー処理
-	    if (!defined(param($entry)) || !length(param($entry))) {
-		$error .= "<p>エラー: 「<font color=\"red\">$conf::PARAM_LABELS{$entry}</font>」は必須項目です。</p>\n";
-	    } elsif ($entry eq "e-mail" && param($entry) !~ /\S+@\S+/) {
-		$error .= "<p>エラー: 「<font color=\"red\">$conf::PARAM_LABELS{$entry}</font>」が正しくありません。</p>\n";
-	    }
-	}
-	if (length($error)) {
-	    print header();
-	    print $conf::HTML_HEADER;
-	    print $error;
-	    print html_form();
-	    print $conf::HTML_FOOTER;
-	    exit;
-	}
+    print header("text/html; charset=EUC-JP");
+    my $message = verify_status();
 
-	my $xml = <<EOF;
-<?xml version="1.0" encoding="EUC-JP"?>
-<データベース>
-EOF
-	$xml .= param2xml(@conf::PARAMETERS);
-	$xml .= "</データベース>\n";
-
-	# データを登録する
-	my $id = get_id();
-	my $xmlfile = "$conf::DATADIR/$id.xml";
-	my $fh = util::fopen(">$xmlfile");
-	print $fh $xml;
-	$fh->close;
-
-	my $report = '';
-	print header();
-	print $conf::HTML_HEADER;
-	print "<p>データを登録しました。</p>";
-	print $conf::HTML_FOOTER;
-
-	if ($conf::USE_MAIL) {
-	    my $msg = util::html2txt($report);
-	    util::send_mail($conf::FROM, param('e-mail'), $conf::SUBJECT,
-			    param('name'), $msg);
-	}
+    if (defined valid_dbname()) {
+	my $tmpl = HTML::Template->new('filename' => 'template/genform.tmpl');
+	$tmpl->param('SCRIPT_NAME' => script_name(),
+		     'DBNAME' => valid_dbname(),
+		     'MESSAGE' => $message,
+		     'TITLE' => $conf::TITLE,
+		     'HOME_TITLE' => $conf::HOME_TITLE,
+		     'HOME_URL' => $conf::HOME_URL,
+		     'EMAIL' => $conf::EMAIL,
+		     'NOTE' => $conf::NOTE,
+		     'FORM' => param2form($conf::FORM));
+	print $tmpl->output;
     } else {
-	print header();
-	print $conf::HTML_HEADER;
-	print html_form();
-	print $conf::HTML_FOOTER;
+	my $tmpl = HTML::Template->new('filename' => 'template/dblist.tmpl');
+	$tmpl->param('TITLE' => '一覧',
+		     'MESSAGE' => $message,
+		     'DBINFO' => get_dbinfo());
+	print $tmpl->output;
     }
 }
 
-sub html_form() {
-    my $script_name = script_name();
-    my $retstr = <<EOF;
-$conf::NOTE
-<form method="POST" action="$script_name">
-<table cellpadding="2" border="2">
-EOF
-    $retstr .= param2form(@conf::PARAMETERS);
-    $retstr .= <<EOF;
-</table>
-<p>
-<input type="submit" value=" 登 録 ">
-</p>
-<p>※ 必須入力項目です。</p>
-</form>
-EOF
-}
-
-# フォーム部品を設定に従って配置する
-sub param2form(@) {
-    my (@parameter) = (@_);
+sub get_dbinfo() {
     my $retstr = '';
-    for my $entry (@parameter) {
-	next if $conf::PARAM_TYPES{$entry} =~ /^external/o;
-	$retstr .= "<tr><td>$conf::PARAM_LABELS{$entry}";
-	$retstr .= " ※" if defined $conf::REQ_PARAMETERS{$entry};
-	$retstr .= "</td><td>";
-	my @type = split(/:/, $conf::PARAM_TYPES{$entry});
-	if ($type[0] eq 'textfield') {
-	    my $size = $type[1];
-	    $retstr .= "<input type=\"text\" name=\"$entry\" value=\"";
-	    $retstr .= CGI::escapeHTML(param($entry)) if defined param($entry);
-	    $retstr .= "\"";
-	    $retstr .= " size=\"$size\"" if defined $size;
-	    $retstr .= ">";
-	    if (defined $conf::PARAM_REPEATABLES{$entry}) {
-		$retstr .= "<br><small>複数の項目を登録する場合は、コンマで区切って入れてください。<br>例: $conf::PARAM_LABELS{$entry}1,$conf::PARAM_LABELS{$entry}2,$conf::PARAM_LABELS{$entry}3</small>";
-	    }
-	} elsif ($type[0] eq 'textarea') {
-	    my $rows = $type[1];
-	    my $cols = $type[2];
-	    $retstr .= "<textarea name=\"$entry\" rows=\"$rows\" cols=\"$cols\">";
-	    $retstr .= CGI::escapeHTML(param($entry)) if defined param($entry);
-	    $retstr .= "</textarea>";
-	} elsif ($type[0] eq 'radio') {
-            shift @type;
-            foreach my $val (@type) {
-                $retstr .= "<input type=\"radio\" name=\"$entry\" value=\"$val\"";
-                if (defined(param($entry)) && param($entry) eq $val) {
-                    $retstr .= " checked";
-                }
-                $retstr .= ">". $conf::PARAM_LABELS{"$entry:$val"};
-            }
-	} elsif ($type[0] eq "nest") {
-	    shift @type;
-	    $retstr .= "<table cellpadding=\"1\" border=\"1\" width=\"100%\">";
-	    $retstr .= param2form(@type);
-	    $retstr .= "</table>";
-	}
-	$retstr .= "</td></tr>\n";
+    opendir(D, "$conf::DATADIR") || die "opendir fail: $conf::DATADIR: $!";
+    my @dirs = grep { -d "$conf::DATADIR/$_" && /^\w+$/ } readdir(D);
+    closedir(D);
+
+    my $script_name = script_name();
+    foreach my $db (@dirs) {
+	next unless -r "$conf::DATADIR/$db/conf.pl" &&
+	            -r "$conf::DATADIR/$db/form.pl";
+	require "$db/conf.pl" if -r "$db/conf.pl";
+	$retstr .= "<li><a href=\"$script_name/$db\">";
+	$retstr .= CGI::escapeHTML(defined $conf::TITLE ? $conf::TITLE : $db);
+	$retstr .= "</li>\n";
     }
     return $retstr;
 }
 
-# ユーザが入力したパラメータをXML化する。
-sub param2xml (@) {
-    my @parameters = (@_);
-    my $xml = '';
-    for my $entry (@parameters) {
-	my $value = CGI::escapeHTML(param($entry));
-	my $tag = $conf::PARAM_LABELS{$entry};
-	my ($type, @args) =split(/:/, $conf::PARAM_TYPES{$entry});
-	if ($type eq "textfield") {
-	    if (defined $conf::PARAM_REPEATABLES{$entry} &&
-		param($entry) =~ /,/o) {
-		my @values = split(/,/, CGI::escapeHTML(param($entry)));
-		for my $val (@values) {
-		    $xml .= "<$tag>$val</$tag>\n";
-		}
-	    } else {
-		$xml .= "<$tag>". CGI::escapeHTML(param($entry)) ."</$tag>\n";
-	    }
-	} elsif ($type eq "radio") {
-	    my $str = $entry . CGI::escapeHTML(param($entry));
-	    $xml .= "<$tag>$conf::PARAM_LABELS{$str}</$tag>";
-	} elsif ($type eq "textarea") {
-	    $xml .= "<$tag>". CGI::escapeHTML(param($entry)) ."</$tag>\n";
-	} elsif ($type eq "external") {
-	    param($entry, eval "$args[0]");
-	    $xml .= "<$tag>". CGI::escapeHTML(param($entry)) ."</$tag>\n";
-	} elsif ($type eq "nest") {
-	    $xml .= "<$tag>". param2xml(@args) ."</$tag>\n";
+# パラメータなどから、エラー状況などを確認する。
+sub verify_status() {
+    my $message = '';
+    if (! -d $conf::DATADIR) {
+	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code> が存在しません。</p>\n";
+    } elsif (! -w $conf::DATADIR) {
+	$message .= "<p class=\"error-message\">エラー: ディレクトリ <code>$conf::DATADIR</code> に書きこみできません。</p>\n";
+    }
+
+    if (path_info()) {
+	my $dbname = valid_dbname();
+	$message .= "<p class=\"error-message\">エラー: 存在しないデータベースを指定しています。</p>" if not defined $dbname;
+
+	unless (-r "$conf::DATADIR/$dbname/conf.pl" &&
+		-r "$conf::DATADIR/$dbname/form.pl") {
+	    $message .= "<p class=\"error-message\">エラー: データベースは設定中です。</p>"
 	}
     }
-    return $xml;
+    return $message;
 }
 
-sub get_id() {
-    my $i = 0;
-    while (-f "$conf::DATADIR/$i.xml") {
-	$i++;
+sub tostr($) {
+    my ($str) = (@_);
+    if (defined $str) {
+	$str =~ s/'/\\'/g;
+	return "'$str'";
+    } else {
+	return "undef";
     }
-    return $i;
 }
 
-# For avoiding "used only once: possible typo at ..." warnings.
-util::muda(
-$conf::FROM,
-$conf::SUBJECT,
-$conf::NOTE,
-$conf::USE_MAIL,
-);
+muda($conf::TITLE, $conf::EMAIL, $conf::HOME_URL, $conf::HOME_TITLE,
+     $conf::NOTE);
